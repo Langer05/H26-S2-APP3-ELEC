@@ -1,60 +1,102 @@
 import numpy as np                  # Gestion de donnees
 import matplotlib.pyplot as plt     # Gestion de graphiques
 import argparse as ap               # Entree de parametres
-
 from scipy.ndimage import label
-print('---------- Étape 1 & 2 ----------')
-
-data1_file_name = './S2GE_APP3_Problematique_Detecteur_Primaire.csv'
-data2_file_name = './S2GE_APP3_Problematique_Detecteur_Secondaire.csv'
-
-data1 = np.loadtxt(data1_file_name, delimiter=',', skiprows=1) # Load les donnees primaires dans une matrice
-data2 = np.loadtxt(data2_file_name, delimiter=',', skiprows=1) # Load les donnees secondaires dans une matrice
-
-data1_volt_max = data1[0][2]
-data1_volt_min = data1[0][2]
-data2_volt_max = data2[0][2]
-data2_volt_min = data2[0][2]
-
-data1_volt = np.zeros(len(data1))
-for i in range(len(data1)):
-    data1_volt[i] = data1[i][2]
-
-data2_volt = np.zeros(len(data2))
-for i in range(len(data2)):
-    data2_volt[i] = data2[i][2]
-
-data1_volt_max = data1_volt.max()
-data1_volt_min = data1_volt.min()
-data2_volt_max = data2_volt.max()
-data2_volt_min = data2_volt.min()
+from sympy import true
 
 
-nb_hist_bins = 500 # Valeur nombre de bins dans l'histogramme
-width_bins_volt1 = np.logspace(start = 0, stop = data1_volt_max,
-                               num = nb_hist_bins, base = 10)
-width_bins_volt2 = np.logspace(start = 0, stop = data2_volt_max,
-                               num = nb_hist_bins, base = 10)
+#data1_file_name = './S2GE_APP3_Problematique_Detecteur_Primaire.csv'
+#data2_file_name = './S2GE_APP3_Problematique_Detecteur_Secondaire.csv'
 
-print(data1_volt.shape, '\t\t', width_bins_volt1.shape)
+def get_data_file(file_name, column = 'ALL', delimiter=',', skip_header=1):
+    data = np.loadtxt(file_name, delimiter=delimiter, skiprows=skip_header)
+    index = data[:,0]
+    time = data[:,1]
+    volt = data[:,2]
+    dead_time = data[:,3]
+    temps = data[:,4]
+    if column == 'ALL':
+        return index, time, volt, dead_time, temps
+    if column == 'INDEX':
+        return index
+    if column == 'TIME':
+        return time
+    if column == 'VOLT':
+        return volt
+    if column == 'DEAD_TIME':
+        return dead_time
+    if column == 'TEMP':
+        return temps
+    return None
 
-hist_volt1, edge_bins_volt1 = np.histogram(a = data1_volt, bins = nb_hist_bins)
+def make_histogram_log(amp, nb_bins = 30):
+    bin_width = np.logspace(np.log10(amp.min()), np.log10(amp.max()), nb_bins)
+    hist, bin_edges = np.histogram(a = amp, bins = bin_width)
+    return hist, bin_edges
+
+def make_histogram(amp, nb_bins = 30):
+    bin_width = np.linspace(amp.min(), amp.max(), nb_bins)
+    hist, bin_edges = np.histogram(a = amp, bins = bin_width)
+    return hist, bin_edges
+
+def add_histogram(hist1, hist2, bin_edges1, bin_edges2):
+    avr_bin_edges = (bin_edges1 + bin_edges2)/2
+    total_hist = hist1 + hist2
+    return total_hist, avr_bin_edges
+
+def coincidence(arr1, arr2, tolerance, bin_edges):
+    all_event = [0] * len(bin_edges)
+    non_coincident = [0] * len(bin_edges)
+    coincident = [0] * len(bin_edges)
+
+    k = 1
+    for i in range(len(arr1)):
+        delta = (arr1[i] - arr2[i])
+        avr = (arr1[i] + arr2[i]) / 2
+
+        # What bin
+        if avr > bin_edges[k]:
+            while avr > bin_edges[k]:
+                print(i)
+                if k >= 29:
+                    break
+                k = k + 1
+        # Coincidence
+        if delta < tolerance:
+            coincident[k - 1] = coincident[k - 1] + 1
+        # Non-coincidence
+        else:
+            non_coincident[k - 1] = non_coincident[k - 1] + 1
+
+        all_event[k - 1] = all_event[k - 1] + 1
+
+    return all_event, non_coincident, coincident
 
 
-plt.figure(figsize=(10,10))
-plt.stairs(values = hist_volt1, edges = edge_bins_volt1)
-#plt.hist(data1_volt, bins=nb_hist_bins, histtype='step', color='blue', alpha=1, label='CSV1')
-#plt.hist(data2_volt, bins=nb_hist_bins, histtype='step', color='red', alpha=1, label='CSV2')
-print('Nombre de conetenant : ', nb_hist_bins)
-plt.xscale('log')
-plt.ylabel('Quantité / conetenant')
-plt.xlabel('Tension (mV)')
-plt.title('Quantité de tension détecté')
-plt.grid()
-#plt.legend()
-plt.show()
+def main():
+    data1_file_name = './S2GE_APP3_Problematique_Detecteur_Primaire.csv'
+    data2_file_name = './S2GE_APP3_Problematique_Detecteur_Secondaire.csv'
 
-print('Valeur maximale : ', data1_volt_max, '\tValeur minimale', data1_volt_min)
+    time1 = get_data_file(data1_file_name, 'TIME')
+    time2 = get_data_file(data2_file_name, 'TIME')
 
-print('---------- Étape ----------')
+    hist1, bin_edges1 = make_histogram_log(time1)
+    hist2, bin_edges2 = make_histogram_log(time2)
+    print(bin_edges1.shape)
+    print(bin_edges1)
 
+    all_event, non_coincident, coincident = coincidence(time1, time2,
+                                                        0.010, bin_edges1)
+
+    plt.figure(figsize=(10,10))
+    print(len(all_event))
+    print(bin_edges1.shape)
+    plt.step(bin_edges1, all_event, label="All events")
+    plt.step(bin_edges1, coincident, label="Coincident")
+    plt.step(bin_edges1, non_coincident, label="Non coincident")
+    plt.xscale('log')
+    plt.legend()
+    plt.show()
+
+if __name__ == '__main__':
+    main()
