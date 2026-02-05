@@ -29,12 +29,12 @@ def get_data_file(file_name, column = 'ALL', delimiter=',', skip_header=1):
         return temps
     return None
 
-def make_histogram_log(amp, nb_bins = 40):
+def make_histogram_log(amp, nb_bins):
     bin_width = np.logspace(np.log10(amp.min()), np.log10(amp.max()), nb_bins)
     hist, bin_edges = np.histogram(a = amp, bins = bin_width)
     return hist, bin_edges
 
-def make_histogram(amp, nb_bins = 40):
+def make_histogram(amp, nb_bins):
     bin_width = np.linspace(amp.min(), amp.max(), nb_bins)
     hist, bin_edges = np.histogram(a = amp, bins = bin_width)
     return hist, bin_edges
@@ -44,7 +44,7 @@ def add_histogram(hist1, hist2, bin_edges1, bin_edges2):
     total_hist = hist1 + hist2
     return total_hist, avr_bin_edges
 
-def coincidence(time1, time2, volt1, volt2, tolerance, bin_edges_time, bin_edges_volt):
+def coincidence(time1, time2, volt1, volt2, tolerance, bin_edges_time, bin_edges_volt, temps_mort):
     all_event = [0] * len(bin_edges_time)
     non_coincident = [0] * len(bin_edges_time)
     coincident = [0] * len(bin_edges_time)
@@ -64,7 +64,7 @@ def coincidence(time1, time2, volt1, volt2, tolerance, bin_edges_time, bin_edges
         elif delta > 0:
             j += 1
         else:
-            print('---------------Error---------------')
+            print('Erreur coincidence')
 
     i = 0
     while i < len(time1) and j < len(time2):
@@ -78,17 +78,28 @@ def coincidence(time1, time2, volt1, volt2, tolerance, bin_edges_time, bin_edges
     for i in range(len(all_event)):
         non_coincident[i] = all_event[i] - coincident[i]
 
+    input_temps_mort = input("Voulez-vous les temps morts ? [y/N] : ")
+    if input_temps_mort == 'y' or input_temps_mort == 'Y':
+        delta_t = (time1[-1] - time1[0])
+        Avr_muons_temps = np.sum(coincident) / delta_t
+        Avr_temps_morts = np.sum(temps_mort) / len(temps_mort)
+        Avr_rate_muons = Avr_muons_temps * Avr_temps_morts
+        for i in range(len(coincident)):
+            coincident[i] = coincident[i] + (coincident[i] * Avr_rate_muons)
+
+
     print('Nb d\'evenement total : ', np.sum(all_event))
     print('Nb de coincident : ', np.sum(coincident))
     print('Nb de non coincident : ', np.sum(non_coincident))
 
+
     total_all = np.sum(all_event)
+    coincident_err = np.sqrt(coincident) / total_all
     all_event = all_event / total_all
     coincident = coincident / total_all
     non_coincident = non_coincident / total_all
 
-    return all_event, non_coincident, coincident
-
+    return all_event, non_coincident, coincident, coincident_err, input_temps_mort
 
 def main():
     data1_file_name = './S2GE_APP3_Problematique_Detecteur_Primaire.csv'
@@ -96,52 +107,48 @@ def main():
 
     time1 = get_data_file(data1_file_name, 'TIME')
     time2 = get_data_file(data2_file_name, 'TIME')
-
-    hist1, bin_edges1 = make_histogram(time1)
-    hist2, bin_edges2 = make_histogram(time2)
-    print(bin_edges1.shape)
-    print(bin_edges1)
-
-    all_event, non_coincident, coincident = coincidence(time1, time2,
-                                                        0.010, bin_edges1)
-    volt1 = get_data_file(data1_file_name, 'VOLT')
-    bin_volt1, bin_volt1_edges = make_histogram_log(volt1, nb_bins = 30)
-
-    plt.figure(figsize=(10,10))
-    print(len(all_event))
-    print(bin_edges1.shape)
-    plt.step(bin_edges1, all_event, label="All events", color='blue')
-    plt.step(bin_edges1, coincident, label="Coincident", color='red')
-    plt.step(bin_edges1, non_coincident, label="Non coincident", color='green')
-    #plt.xscale('log')
-    plt.legend()
-    plt.show()
-
-def main2():
-    data1_file_name = './S2GE_APP3_Problematique_Detecteur_Primaire.csv'
-    data2_file_name = './S2GE_APP3_Problematique_Detecteur_Secondaire.csv'
-
-    time1 = get_data_file(data1_file_name, 'TIME')
-    time2 = get_data_file(data2_file_name, 'TIME')
     volt1 = get_data_file(data1_file_name, 'VOLT')
     volt2 = get_data_file(data2_file_name, 'VOLT')
+    temps_morts = get_data_file(data1_file_name, 'TEMP')
 
-    hist_time1, edges_time1 = make_histogram_log(time1)
-    hist_time2, edges_time2 = make_histogram_log(time2)
-    hist_volt1, edges_volt1 = make_histogram_log(volt1)
-    hist_volt2, edges_volt2 = make_histogram_log(volt2)
+    nb_bins = int(input("Nombre de classe (N) : "))
+    hist_time1, edges_time1 = make_histogram_log(time1, nb_bins)
+    hist_time2, edges_time2 = make_histogram_log(time2, nb_bins)
+    hist_volt1, edges_volt1 = make_histogram_log(volt1, nb_bins)
+    hist_volt2, edges_volt2 = make_histogram_log(volt2, nb_bins)
 
-    all_event, non_coincident, coincident = coincidence(time1, time2,
-                                                        volt1, volt2, 0.012,
-                                                        edges_time1, edges_volt1)
+    all_event, non_coincident, coincident, coincident_err, input_temps_mort =   (coincidence(time1, time2,
+                                                                                volt1, volt2, 0.010,
+                                                                                edges_time1, edges_volt1,
+                                                                                temps_morts))
+
+    edges_err = np.zeros(len(edges_volt1))
+    for i in range(len(edges_volt1) - 1):
+        edges_err[i+1] = (edges_volt1[i + 1] + edges_volt1[i]) / 2
 
     plt.figure(figsize=(10,10))
-    plt.step(edges_volt1, all_event, label="All events", color='blue')
+    plt.step(edges_volt1, all_event, label="All events", color='grey')
     plt.step(edges_volt1, non_coincident, label="Non coincident", color='green')
     plt.step(edges_volt1, coincident, label="Coincident", color='red')
+    plt.errorbar(edges_err, coincident, yerr=coincident_err, fmt='none', color='red')
+    plt.legend()
+    plt.xlabel('Tension [mV]')
+    plt.ylabel('Taux / classe [s^-1]')
     plt.xscale('log')
-    plt.show()
+    plt.grid(which='both', linestyle='--', linewidth=0.2, color='grey')
+    plt.ylim(0, 0.13)
+
+    if input_temps_mort == 'y' or input_temps_mort == 'Y':
+        plt.title('Nombre de muons détecté par niveau de tension (Rectification pour les temps morts)')
+    else:
+        plt.title('Nombre de muons détecté par niveau de tension')
+
+    input_is_fichier = input("Créer un fichier ? [y/N]")
+    if input_is_fichier == "y" or input_is_fichier == "Y":
+        plt.savefig("app3_fig.png")
+    else:
+        plt.show()
 
 
 if __name__ == '__main__':
-    main2()
+    main()
