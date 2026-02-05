@@ -39,11 +39,6 @@ def make_histogram(amp, nb_bins):
     hist, bin_edges = np.histogram(a = amp, bins = bin_width)
     return hist, bin_edges
 
-def add_histogram(hist1, hist2, bin_edges1, bin_edges2):
-    avr_bin_edges = (bin_edges1 + bin_edges2)/2
-    total_hist = hist1 + hist2
-    return total_hist, avr_bin_edges
-
 def coincidence(time1, time2, volt1, volt2, tolerance, bin_edges_time, bin_edges_volt, temps_mort):
     all_event = [0] * len(bin_edges_time)
     non_coincident = [0] * len(bin_edges_time)
@@ -80,18 +75,16 @@ def coincidence(time1, time2, volt1, volt2, tolerance, bin_edges_time, bin_edges
 
     input_temps_mort = input("Voulez-vous les temps morts ? [y/N] : ")
     if input_temps_mort == 'y' or input_temps_mort == 'Y':
-        delta_t = (time1[-1] - time1[0])
+        delta_t = (time1[-1] - 0) - np.sum(temps_mort)
         Avr_muons_temps = np.sum(coincident) / delta_t
         Avr_temps_morts = np.sum(temps_mort) / len(temps_mort)
         Avr_rate_muons = Avr_muons_temps * Avr_temps_morts
         for i in range(len(coincident)):
             coincident[i] = coincident[i] + (coincident[i] * Avr_rate_muons)
 
-
     print('Nb d\'evenement total : ', np.sum(all_event))
     print('Nb de coincident : ', np.sum(coincident))
     print('Nb de non coincident : ', np.sum(non_coincident))
-
 
     total_all = np.sum(all_event)
     coincident_err = np.sqrt(coincident) / total_all
@@ -118,7 +111,7 @@ def main():
     hist_volt2, edges_volt2 = make_histogram_log(volt2, nb_bins)
 
     all_event, non_coincident, coincident, coincident_err, input_temps_mort =   (coincidence(time1, time2,
-                                                                                volt1, volt2, 0.010,
+                                                                                volt1, volt2, 0.012,
                                                                                 edges_time1, edges_volt1,
                                                                                 temps_morts))
 
@@ -127,21 +120,21 @@ def main():
         edges_err[i+1] = (edges_volt1[i + 1] + edges_volt1[i]) / 2
 
     plt.figure(figsize=(10,10))
-    plt.step(edges_volt1, all_event, label="All events", color='grey')
-    plt.step(edges_volt1, non_coincident, label="Non coincident", color='green')
-    plt.step(edges_volt1, coincident, label="Coincident", color='red')
+    plt.step(edges_volt1, all_event, label="Événements capteur primaire", color='grey')
+    plt.step(edges_volt1, non_coincident, label="Événement autres", color='green')
+    plt.step(edges_volt1, coincident, label="Événements captés simultanément", color='red')
     plt.errorbar(edges_err, coincident, yerr=coincident_err, fmt='none', color='red')
     plt.legend()
     plt.xlabel('Tension [mV]')
     plt.ylabel('Taux / classe [s^-1]')
     plt.xscale('log')
     plt.grid(which='both', linestyle='--', linewidth=0.2, color='grey')
-    plt.ylim(0, 0.13)
+    plt.ylim(0, 0.14)
 
     if input_temps_mort == 'y' or input_temps_mort == 'Y':
-        plt.title('Nombre de muons détecté par niveau de tension (Rectification pour les temps morts)')
+        plt.title('Nombre de muons détectés par niveau de tension (Rectification pour les temps morts)')
     else:
-        plt.title('Nombre de muons détecté par niveau de tension')
+        plt.title('Nombre de muons détectés par niveau de tension')
 
     input_is_fichier = input("Créer un fichier ? [y/N]")
     if input_is_fichier == "y" or input_is_fichier == "Y":
